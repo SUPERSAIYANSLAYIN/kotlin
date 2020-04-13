@@ -75,8 +75,8 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : IrEle
     }
 
     private val functionMap = mutableMapOf<Pair<IrFunctionSymbol, IrDeclarationParent>, IrFunctionSymbol>()
-    private val getterMap = mutableMapOf<IrFieldSymbol, IrSimpleFunctionSymbol>()
-    private val setterMap = mutableMapOf<IrFieldSymbol, IrSimpleFunctionSymbol>()
+    private val getterMap = mutableMapOf<Pair<IrFieldSymbol, IrDeclarationParent>, IrSimpleFunctionSymbol>()
+    private val setterMap = mutableMapOf<Pair<IrFieldSymbol, IrDeclarationParent>, IrSimpleFunctionSymbol>()
 
     override fun visitFunctionAccess(expression: IrFunctionAccessExpression): IrExpression {
         if (expression.usesDefaultArguments()) {
@@ -157,7 +157,15 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : IrEle
 
     override fun visitGetField(expression: IrGetField) = super.visitExpression(
         if (!expression.symbol.isAccessible(false, expression.receiver?.type?.classifierOrNull as? IrClassSymbol)) {
-            modifyGetterExpression(expression, getterMap.getOrPut(expression.symbol) { makeGetterAccessorSymbol(expression.symbol) })
+            val symbol = expression.symbol
+            val dispatchReceiverType = expression.receiver?.type
+            val parent =
+                symbol.owner.accessorParent(dispatchReceiverType?.classOrNull?.owner ?: symbol.owner.parent) as IrClass
+            val symbolToAccess = symbol.owner.findDescendantIn(parent)?.symbol ?: symbol
+            modifyGetterExpression(
+                expression,
+                getterMap.getOrPut(Pair(symbolToAccess, parent)) { makeGetterAccessorSymbol(symbolToAccess, parent) }
+            )
         } else {
             expression
         }
@@ -165,11 +173,24 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : IrEle
 
     override fun visitSetField(expression: IrSetField) = super.visitExpression(
         if (!expression.symbol.isAccessible(false, expression.receiver?.type?.classifierOrNull as? IrClassSymbol)) {
-            modifySetterExpression(expression, setterMap.getOrPut(expression.symbol) { makeSetterAccessorSymbol(expression.symbol) })
+            val symbol = expression.symbol
+            val dispatchReceiverType = expression.receiver?.type
+            val parent =
+                symbol.owner.accessorParent(dispatchReceiverType?.classOrNull?.owner ?: symbol.owner.parent) as IrClass
+            val symbolToAccess = symbol.owner.findDescendantIn(parent)?.symbol ?: symbol
+            modifySetterExpression(
+                expression,
+                setterMap.getOrPut(Pair(symbolToAccess, parent)) { makeSetterAccessorSymbol(symbolToAccess, parent) }
+            )
         } else {
             expression
         }
     )
+
+    private fun IrField.findDescendantIn(derivedClass: IrClass): IrField? =
+        derivedClass.fields.singleOrNull { candidate ->
+            candidate.name == this.name && candidate.overrides(this)
+        }
 
     override fun visitConstructor(declaration: IrConstructor): IrStatement {
         if (declaration.isOrShouldBeHidden) {
@@ -303,7 +324,7 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : IrEle
             copyAllParamsToArgs(it, accessor)
         }
 
-    private fun makeGetterAccessorSymbol(fieldSymbol: IrFieldSymbol): IrSimpleFunctionSymbol =
+    private fun makeGetterAccessorSymbol(fieldSymbol: IrFieldSymbol, parent: IrDeclarationParent): IrSimpleFunctionSymbol =
         buildFun {
             origin = JvmLoweredDeclarationOrigin.SYNTHETIC_ACCESSOR
             name = fieldSymbol.owner.accessorNameForGetter()
@@ -311,7 +332,7 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : IrEle
             modality = Modality.FINAL
             returnType = fieldSymbol.owner.type
         }.also { accessor ->
-            accessor.parent = fieldSymbol.owner.accessorParent()
+            accessor.parent = parent
             pendingAccessorsToAdd.add(accessor)
 
             if (!fieldSymbol.owner.isStatic) {
@@ -339,7 +360,7 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : IrEle
         )
     }
 
-    private fun makeSetterAccessorSymbol(fieldSymbol: IrFieldSymbol): IrSimpleFunctionSymbol =
+    private fun makeSetterAccessorSymbol(fieldSymbol: IrFieldSymbol, parent: IrDeclarationParent): IrSimpleFunctionSymbol =
         buildFun {
             origin = JvmLoweredDeclarationOrigin.SYNTHETIC_ACCESSOR
             name = fieldSymbol.owner.accessorNameForSetter()
@@ -347,7 +368,7 @@ internal class SyntheticAccessorLowering(val context: JvmBackendContext) : IrEle
             modality = Modality.FINAL
             returnType = context.irBuiltIns.unitType
         }.also { accessor ->
-            accessor.parent = fieldSymbol.owner.accessorParent()
+            accessor.parent = parent
             pendingAccessorsToAdd.add(accessor)
 
             if (!fieldSymbol.owner.isStatic) {

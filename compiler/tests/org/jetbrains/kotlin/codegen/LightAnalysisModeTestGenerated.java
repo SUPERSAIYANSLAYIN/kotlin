@@ -15571,6 +15571,11 @@ public class LightAnalysisModeTestGenerated extends AbstractLightAnalysisModeTes
             runTest("compiler/testData/codegen/box/javaInterop/lambdaInstanceOf.kt");
         }
 
+        @TestMetadata("protectedField.kt")
+        public void testProtectedField() throws Exception {
+            runTest("compiler/testData/codegen/box/javaInterop/protectedField.kt");
+        }
+
         @TestMetadata("compiler/testData/codegen/box/javaInterop/generics")
         @TestDataPath("$PROJECT_ROOT")
         @RunWith(JUnit3RunnerWithInners.class)
