@@ -1,0 +1,27 @@
+LineBreakpoint created at sequence.kt:14
+Run Java
+Connected to the target VM
+sequence.kt:14
+Thread stack trace:
+nextSequence:14, continuation.SequenceKt
+	invokeSuspend:25, continuation.SequenceKt$fibonacci$1
+		($this$sequence, step, terms)
+	resumeWith:33, kotlin.coroutines.jvm.internal.BaseContinuationImpl
+		()
+	hasNext:140, kotlin.sequences.SequenceBuilderIterator
+		()
+	hasNext:374, kotlin.sequences.TakeSequence$iterator$1
+		()
+	toCollection:722, kotlin.sequences.SequencesKt___SequencesKt
+		()
+	toMutableList:752, kotlin.sequences.SequencesKt___SequencesKt
+		()
+	toList:743, kotlin.sequences.SequencesKt___SequencesKt
+		()
+	main:7, continuation.SequenceKt
+		()
+	main:-1, continuation.SequenceKt
+		()
+Disconnected from the target VM
+
+Process finished with exit code 0

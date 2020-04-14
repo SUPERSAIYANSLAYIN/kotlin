@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.idea.debugger.coroutine.proxy
 
+import com.intellij.debugger.engine.DebugProcessImpl
 import com.intellij.debugger.engine.SuspendContextImpl
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl
 import com.intellij.debugger.jdi.StackFrameProxyImpl
@@ -29,6 +30,9 @@ fun Method.isContinuation() =
 
 fun Method.isSuspendLambda() =
     isInvokeSuspend() && declaringType().isSuspendLambda()
+
+fun Method.isSuspendMethod() =
+    signature().contains(";Lkotlin/coroutines/Continuation;)")
 
 fun Method.isResumeWith() =
     name() == "resumeWith" && signature() == "(Ljava/lang/Object;)V" && (declaringType().isSuspendLambda() || declaringType().isContinuation())
@@ -64,8 +68,8 @@ fun StackFrameProxyImpl.variableValue(variableName: String): ObjectReference? {
 fun StackFrameProxyImpl.completionVariableValue(): ObjectReference? =
     variableValue("completion")
 
-fun StackFrameProxyImpl.completion1VariableValue(): ObjectReference? =
-    variableValue("completion")
+fun StackFrameProxyImpl.continuationVariableValue(): ObjectReference? =
+    variableValue("\$continuation")
 
 fun StackFrameProxyImpl.thisVariableValue(): ObjectReference? =
     this.thisObject()
@@ -134,3 +138,8 @@ fun SuspendContextImpl.supportsEvaluation() =
 
 fun XDebugSession.suspendContextImpl() =
     suspendContext as SuspendContextImpl
+
+fun threadAndContextSupportsEvaluation(suspendContext: SuspendContextImpl, frameProxy: StackFrameProxyImpl?) =
+    suspendContext.invokeInManagerThread {
+        suspendContext.supportsEvaluation() && frameProxy?.threadProxy()?.supportsEvaluation() ?: false
+    } ?: false

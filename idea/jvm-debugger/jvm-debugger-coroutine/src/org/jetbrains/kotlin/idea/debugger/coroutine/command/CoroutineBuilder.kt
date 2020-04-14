@@ -6,17 +6,12 @@
 package org.jetbrains.kotlin.idea.debugger.coroutine.command
 
 import com.intellij.debugger.engine.SuspendContextImpl
-import com.intellij.debugger.jdi.StackFrameProxyImpl
 import com.intellij.debugger.jdi.ThreadReferenceProxyImpl
 import com.sun.jdi.*
 import org.jetbrains.kotlin.idea.debugger.coroutine.CoroutineAsyncStackTraceProvider
 import org.jetbrains.kotlin.idea.debugger.coroutine.data.*
 import org.jetbrains.kotlin.idea.debugger.coroutine.proxy.ContinuationHolder.Companion.leftThreadStack
-import org.jetbrains.kotlin.idea.debugger.coroutine.proxy.CoroutinePreflightStackFrame
 import org.jetbrains.kotlin.idea.debugger.coroutine.proxy.isPreFlight
-import org.jetbrains.kotlin.idea.debugger.safeLineNumber
-import org.jetbrains.kotlin.idea.debugger.safeLocation
-import org.jetbrains.kotlin.idea.debugger.safeMethod
 
 
 class CoroutineBuilder(val suspendContext: SuspendContextImpl) {
@@ -37,11 +32,11 @@ class CoroutineBuilder(val suspendContext: SuspendContextImpl) {
             for (runningStackFrameProxy in realFrames) {
                 if (runningStackFrameProxy.location().isPreFlight()) {
                     val leftThreadStack = leftThreadStack(runningStackFrameProxy) ?: continue
-                    val coroutineStack =
+                    val preflightStackFrame =
                         coroutineStackFrameProvider.lookupForResumeContinuation(runningStackFrameProxy, suspendContext, leftThreadStack) ?: continue
-                    coroutineStackFrameList.add(RunningCoroutineStackFrameItem(coroutineStack.stackFrameProxy))
+                    coroutineStackFrameList.add(RunningCoroutineStackFrameItem(preflightStackFrame.stackFrameProxy))
                     // clue coroutine stack into the thread's real stack
-                    val stackFrameItems = coroutineStack.coroutineInfoData.stackTrace.map {
+                    val stackFrameItems = preflightStackFrame.coroutineInfoData.stackTrace.map {
                         RestoredCoroutineStackFrameItem(
                             runningStackFrameProxy,
                             it.location,

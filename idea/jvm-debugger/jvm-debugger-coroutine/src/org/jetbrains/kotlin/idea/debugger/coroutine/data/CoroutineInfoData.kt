@@ -22,7 +22,7 @@ data class CoroutineInfoData(
     val stackTrace: MutableList<CoroutineStackFrameItem>,
     val creationStackTrace: List<CreationCoroutineStackFrameItem>,
     val activeThread: ThreadReference? = null, // for suspended coroutines should be null
-    val lastObservedFrameFieldRef: ObjectReference? = null
+    val lastObservedFrame: ObjectReference? = null
 ) {
     fun isSuspended() = key.state == State.SUSPENDED
 
@@ -31,6 +31,8 @@ data class CoroutineInfoData(
     fun isEmptyStack() = stackTrace.isEmpty()
 
     fun isRunning() = key.state == State.RUNNING
+
+    fun topRestoredFrame() = stackTrace.firstOrNull()
 
     companion object {
         val log by logger
@@ -44,18 +46,21 @@ data class CoroutineInfoData(
         ): CoroutineInfoData? {
             val locationCache = LocationCache(context)
             val creationStackTrace = mutableListOf<CreationCoroutineStackFrameItem>()
-            val realState = if (input?.type()?.isAbstractCoroutine() ?: false) {
+            val realState = if (input?.type()?.isAbstractCoroutine() == true) {
                 state(input, context) ?: return null
             } else {
                 val ci = DebugProbesImpl(context).getCoroutineInfo(input, context)
                 if (ci != null) {
                     if (ci.creationStackTrace != null)
-                        for (frame in ci.creationStackTrace.mapNotNull { it.stackTraceElement() }) {
-                            creationStackTrace.add(CreationCoroutineStackFrameItem(frame, locationCache.createLocation(frame)))
+                        for (index in 0 until ci.creationStackTrace.size) {
+                            val frame = ci.creationStackTrace.get(index)
+                            val ste = frame.stackTraceElement()
+                            val location = locationCache.createLocation(ste)
+                            creationStackTrace.add(CreationCoroutineStackFrameItem(ste, location, index == 0))
                         }
                     CoroutineNameIdState.instance(ci)
                 } else {
-                    log.warn("Coroutine information not found, ${input?.type()} is not subtype of AbstractCoroutine as expected.")
+                    log.warn("Coroutine agent information not found.")
                     CoroutineNameIdState(DEFAULT_COROUTINE_NAME, "-1", State.UNKNOWN, null)
                 }
             }

@@ -41,13 +41,13 @@ class CoroutineAsyncStackTraceProvider : AsyncStackTraceProvider {
             val stackFrames = mutableListOf<CoroutineStackFrameItem>()
             stackFrames.addAll(stackFrame.coroutineInfoData.stackTrace)
 
-//            val lastRestoredFrame = stackFrame.coroutineInfoData.stackTrace.first()
+            val lastRestoredFrame = stackFrame.coroutineInfoData.stackTrace.first()
 
-            stackFrames.addAll(stackFrame.threadPreCoroutineFrames.mapIndexed { index, stackFrameProxyImpl ->
-//                if (index == 0)
-//                    PreCoroutineStackFrameItem(stackFrameProxyImpl, lastRestoredFrame) // get location and variables also from restored part
-//                else
-                    PreCoroutineStackFrameItem(stackFrameProxyImpl)
+            stackFrames.addAll(stackFrame.threadPreCoroutineFrames.mapIndexedNotNull { index, stackFrameProxyImpl ->
+                if (index == 0)
+                    PreCoroutineStackFrameItem(stackFrameProxyImpl, lastRestoredFrame) // get location and variables also from restored part
+                else
+                    suspendContext.invokeInManagerThread { PreCoroutineStackFrameItem(stackFrameProxyImpl) }
             })
             stackFrames.addAll(stackFrame.coroutineInfoData.creationStackTrace)
             return stackFrames
@@ -64,12 +64,7 @@ class CoroutineAsyncStackTraceProvider : AsyncStackTraceProvider {
         if (!location.isInKotlinSources())
             return null
 
-        if (threadAndContextSupportsEvaluation(suspendContext, frameProxy))
-            return ContinuationHolder.lookupContinuation(suspendContext, frameProxy, framesLeft)
-        return null
+        return ContinuationHolder.lookupContinuation(suspendContext, frameProxy, framesLeft)
     }
-
-    private fun threadAndContextSupportsEvaluation(suspendContext: SuspendContextImpl, frameProxy: StackFrameProxyImpl?) =
-        suspendContext.supportsEvaluation() && frameProxy?.threadProxy()?.supportsEvaluation() ?: false
 }
 
