@@ -13,6 +13,8 @@ dependencies {
     compile(project(":compiler:fir:cones"))
     compile(project(":compiler:fir:tree"))
     compile(project(":compiler:fir:resolve"))
+    compileOnly(project(":compiler:ir.tree"))
+    compileOnly(project(":compiler:fir:fir2ir"))
     compile(project(":compiler:frontend"))
 
     compileOnly(project(":kotlin-reflect-api"))
