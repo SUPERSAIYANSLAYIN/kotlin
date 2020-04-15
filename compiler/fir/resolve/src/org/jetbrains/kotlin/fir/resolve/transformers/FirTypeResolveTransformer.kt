@@ -5,18 +5,25 @@
 
 package org.jetbrains.kotlin.fir.resolve.transformers
 
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.expressions.FirBlock
+import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.expressions.FirStatement
+import org.jetbrains.kotlin.fir.references.builder.buildExplicitSuperReference
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
+import org.jetbrains.kotlin.fir.resolve.dfa.symbol
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.createImportingScopes
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
+import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.types.impl.FirImplicitAnyTypeRef
 import org.jetbrains.kotlin.fir.types.impl.FirImplicitBuiltinTypeRef
 import org.jetbrains.kotlin.fir.visitors.CompositeTransformResult
+import org.jetbrains.kotlin.fir.visitors.FirDefaultTransformer
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 import org.jetbrains.kotlin.fir.visitors.compose
 
@@ -74,7 +81,28 @@ private class FirTypeResolveTransformer(
             }
         }
 
+        val superClass = regularClass.superTypeRefs.firstOrNull {
+            if (it !is FirResolvedTypeRef) return@firstOrNull false
+            if (it.type == session.builtinTypes.anyType.type) return@firstOrNull false
+            val declaration = extractSuperTypeDeclaration(it) ?: return@firstOrNull false
+            declaration.classKind == ClassKind.CLASS
+        } as FirResolvedTypeRef?
+
+        if (superClass != null) {
+            regularClass.transformDeclarations(DelegatedConstructorCallsTransformer, superClass)
+        }
+
         return resolveNestedClassesSupertypes(regularClass, data)
+    }
+
+    private fun extractSuperTypeDeclaration(typeRef: FirTypeRef): FirRegularClass? {
+        if (typeRef !is FirResolvedTypeRef) return null
+        if (typeRef.type == session.builtinTypes.anyType.type) return null
+        return when (val declaration = typeRef.firClassLike(session)) {
+            is FirRegularClass -> declaration
+            is FirTypeAlias -> extractSuperTypeDeclaration(declaration.expandedTypeRef)
+            else -> null
+        }
     }
 
     override fun transformConstructor(constructor: FirConstructor, data: Nothing?): CompositeTransformResult<FirDeclaration> {
@@ -126,5 +154,29 @@ private class FirTypeResolveTransformer(
 
     override fun transformBlock(block: FirBlock, data: Nothing?): CompositeTransformResult<FirStatement> {
         return block.compose()
+    }
+}
+
+private object DelegatedConstructorCallsTransformer : FirDefaultTransformer<FirResolvedTypeRef>() {
+    override fun <E : FirElement> transformElement(element: E, data: FirResolvedTypeRef): CompositeTransformResult<E> {
+        return element.compose()
+    }
+
+    override fun transformConstructor(constructor: FirConstructor, data: FirResolvedTypeRef): CompositeTransformResult<FirDeclaration> {
+        return constructor.transformDelegatedConstructor(this, data).compose()
+    }
+
+    override fun transformDelegatedConstructorCall(
+        delegatedConstructorCall: FirDelegatedConstructorCall,
+        data: FirResolvedTypeRef
+    ): CompositeTransformResult<FirStatement> {
+        if (delegatedConstructorCall.isSuper && delegatedConstructorCall.constructedTypeRef is FirImplicitAnyTypeRef) {
+            delegatedConstructorCall.replaceConstructedTypeRef(data)
+            delegatedConstructorCall.replaceCalleeReference(buildExplicitSuperReference {
+                source = delegatedConstructorCall.calleeReference.source
+                superTypeRef = data
+            })
+        }
+        return delegatedConstructorCall.compose()
     }
 }
