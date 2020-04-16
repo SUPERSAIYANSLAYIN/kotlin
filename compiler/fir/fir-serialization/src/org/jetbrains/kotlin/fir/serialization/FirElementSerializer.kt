@@ -516,6 +516,10 @@ class FirElementSerializer private constructor(
     }
 
     internal fun typeProto(type: ConeKotlinType): ProtoBuf.Type.Builder {
+        if (type is ConeIntegerLiteralType) {
+            // Questionable, I'm not sure we should expect this type here
+            return typeProto(type.getApproximatedType())
+        }
         val builder = ProtoBuf.Type.newBuilder()
 
         if (type is ConeKotlinErrorType) {
